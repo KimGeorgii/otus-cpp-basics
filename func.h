@@ -1,127 +1,76 @@
-//212-Ким-функции и классы
+//212-Ким-генерация 2D гауссовых облаков под пирамидами
 
 #pragma once
 
-#include <list>
-#include <string>
 #include <vector>
-#include <fstream>
+#include <string>
+#include <utility>
 
-// 212-Ким-класс точки центра
-class centre {
-private:
-    float x;
-    float y;
-
-public:
-    centre(float a, float b);
-
-    float getX() const;
-    float getY() const;
-    void setX(float newX);
-    void setY(float newY);
-};
-
-// 212-Ким-класс окружности
-class circle : public centre {
-private:
-    float R;
-
-public:
-    circle(float x, float y, float r);
-
-    float getR() const;
-    float getS() const;
-    void setR(float newR);
-};
-
-// 212-Ким-класс конуса
-class cone : public circle {
-private:
-    float H;
-
-public:
-    cone(float x, float y, float r, float h);
-
-    float getH() const;
-    float getV() const;
-    void setH(float newH);
-};
-
-// 212-Ким-класс генерируемой точки
+//212-Ким-класс точки на плоскости
 class point {
 private:
     float x;
     float y;
-    int cluster;
 
 public:
-    point(float a, float b, int c = -1);
+    point();
+    point(float x, float y);
+    virtual ~point() = default;
 
     float getX() const;
     float getY() const;
-    int getCluster() const;
-    void setCluster(int c);
+    void  setX(float newX);
+    void  setY(float newY);
+
+    virtual void print() const;
 };
 
-// 212-Ким-структура координат квадрата в сетке
-struct square {
-    int ix;
-    int iy;
-};
-
-// 212-Ким-класс сетки квадратов для пространственной индексации
-class grid {
+//212-Ким-класс круга: точка + радиус
+class circle : virtual public point {
 private:
-    float x_min;
-    float y_min;
-    float cell_size;
-    int nx;
-    int ny;
+    float r;
 
 public:
-    grid(float x0, float y0, float x1, float y1, float cs);
+    circle();
+    circle(float x, float y, float r);
+    virtual ~circle() = default;
 
-    float getCellSize() const;
-    float getXMin() const;
-    float getYMin() const;
-    int getNx() const;
-    int getNy() const;
+    float getR() const;
+    void  setR(float newR);
+    float area() const;
 
-    square getSquare(float x, float y) const;
+    void print() const override;
 };
 
-// 212-Ким-чтение конусов из файла
-std::list<cone> readCones(const std::string& filename);
+//212-Ким-класс пирамиды: круг + высота
+class pyramid : public circle {
+private:
+    float h;
 
-// 212-Ким-функция проверки близости значения к нулю
-bool isNearZero(float v, float eps = 0.002f);
+public:
+    pyramid();
+    pyramid(float x, float y, float r, float h);
+    virtual ~pyramid() = default;
 
-// 212-Ким-функция записи уравнения поверхности конуса в файл
-void writeEquation(std::ofstream& out, const cone& c);
+    float getH() const;
+    void  setH(float newH);
 
-// 212-Ким-генерация данных поверхности для Gnuplot
-void writeGnuplotSurface(const std::string& filename, const std::list<cone>& cones);
+    float volume() const;
+    float meanValue() const;
 
-// 212-Ким-запись линий сетки квадратов в файл
-void writeGridLines(const std::string& filename, const grid& g);
+    void print() const override;
+};
 
-// 212-Ким-создание скрипта Gnuplot
-// staticMode = true  — сохраняет PNG-файлы
-// staticMode = false — открывает интерактивное 3D-окно
-void createGnuplotScript(const std::string& scriptFile, bool staticMode);
+//212-Ким-чтение пирамид из файла. Формат строки: x y r h
+std::vector<pyramid> readPyramidsFromFile(const std::string& filename);
 
-// 212-Ким-запуск Gnuplot
-void runGnuplot(const std::string& scriptFile);
+//212-Ким-генерация 2D-гауссова облака точек
+std::vector<std::pair<float, float>> generateGaussianCloud(
+    float cx, float cy,
+    float sigmaX, float sigmaY,
+    float rho, int count);
 
-// 212-Ким-генерация count точек 2D-Гаусса под конусом
-std::vector<point> generateGaussianPoints(const cone& c, int count);
-
-// 212-Ким-сортировка точек по квадратам, затем по x и y
-std::vector<point> sortPointsBySquares(const std::vector<point>& points,
-                                       const grid& g);
-
-// 212-Ким-запись точек в CSV: x,y,cluster,square_ix,square_iy
-void writePointsCSV(const std::string& filename,
-                    const std::vector<point>& points,
-                    const grid& g);
+//212-Ким-визуализация облаков через Gnuplot
+void visualizeClouds(
+    const std::vector<std::vector<std::pair<float, float>>>& allClouds,
+    const std::string& filename = "clouds.png");
