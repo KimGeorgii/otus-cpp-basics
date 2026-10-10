@@ -1,84 +1,85 @@
-// 212-Ким-генерация 2D-Гаусса и кластеризация алгоритмом Волна
+//212-Ким-задача о пирамидах с алгоритмом "волна"
 
 #include "func.h"
 
 #include <iostream>
 #include <fstream>
-#include <vector>
 
 int main() {
-    std::list<cone> cones = readCones("data.txt");
+    //читаем пирамиды из файла pyramids.txt
+    std::vector<pyramid> pyramids = readPyramidsFromFile("pyramids.txt");
 
-    if (cones.empty()) {
-        std::cerr << "Error: no data was found" << std::endl;
+    if (pyramids.empty()) {
+        std::cerr << "File pyramids.txt is empty or not found.\n";
+        std::cerr << "Put it into the working directory of the program.\n";
         return 1;
     }
 
-    // генерация 2D-Гаусса под каждым конусом
-    const int POINTS_PER_CONE = 1000;
-    std::vector<point> all_points;
-    all_points.reserve(cones.size() * POINTS_PER_CONE);
+    std::cout << "Before sorting:\n";
+    for (size_t i = 0; i < pyramids.size(); ++i) {
+        const auto& p = pyramids[i];
+        std::cout << "Pyramid " << i + 1 << ": ";
+        p.print();
+        std::cout << "  area=" << p.area()
+                  << "  volume=" << p.volume()
+                  << "  mean=" << p.meanValue() << "\n";
+    }
 
-    int cluster_id = 0;
-    for (const cone& c : cones) {
-        std::vector<point> pts = generateGaussianPoints(c, POINTS_PER_CONE);
-        for (point& p : pts) {
-            p.setCluster(cluster_id);
-            all_points.push_back(p);
+    //сортируем по среднему значению
+    sortPyramidsByMeanValue(pyramids);
+
+    std::cout << "\nAfter sorting by mean(area, volume):\n";
+    for (size_t i = 0; i < pyramids.size(); ++i) {
+        const auto& p = pyramids[i];
+        std::cout << "Pyramid " << i + 1 << ": ";
+        p.print();
+        std::cout << "  area=" << p.area()
+                  << "  volume=" << p.volume()
+                  << "  mean=" << p.meanValue() << "\n";
+    }
+
+    const int GAUSS_COUNT = 10000;
+
+    std::vector<std::vector<std::pair<float, float>>> allClouds;
+    std::vector<clusteringResult> allResults;
+
+    for (size_t i = 0; i < pyramids.size(); ++i) {
+        const auto& p = pyramids[i];
+        float sigma = p.getR() * 0.5f;
+
+        auto cloud = generateGaussianCloud(
+            p.getX(), p.getY(),
+            sigma, sigma,
+            0.0f, GAUSS_COUNT);
+
+        float cellSize = sigma * 0.4f;
+
+        auto result = matrixWaveClustering(cloud, cellSize, 100);
+
+        std::cout << "\nPyramid " << (i + 1)
+                  << ": gaussian cloud of " << cloud.size() << " points"
+                  << ", sigma=" << sigma
+                  << ", cellSize=" << cellSize << "\n";
+
+        std::cout << "Found " << result.clusters.size() << " clusters:\n";
+        for (size_t j = 0; j < result.clusters.size(); ++j) {
+            const auto& cl = result.clusters[j];
+            std::cout << "  Cluster " << j + 1
+                      << ": center=(" << cl.cx << ", " << cl.cy << ")"
+                      << ", size=" << cl.size << " points\n";
         }
-        cluster_id++;
+
+        int trash = 0;
+        for (int id : result.pointClusterId) {
+            if (id == -1) ++trash;
+        }
+        std::cout << "  Trash points: " << trash << "\n";
+
+        allClouds.push_back(std::move(cloud));
+        allResults.push_back(std::move(result));
     }
 
-    std::cout << "Generated " << all_points.size()
-              << " points for " << cones.size() << " cones" << std::endl;
-
-    // вычисление границ и создание сетки квадратов
-    float x_min = all_points[0].getX();
-    float x_max = x_min;
-    float y_min = all_points[0].getY();
-    float y_max = y_min;
-
-    for (const point& p : all_points) {
-        if (p.getX() < x_min) x_min = p.getX();
-        if (p.getX() > x_max) x_max = p.getX();
-        if (p.getY() < y_min) y_min = p.getY();
-        if (p.getY() > y_max) y_max = p.getY();
-    }
-
-    const float CELL_SIZE = 1.0f;
-    grid g(x_min, y_min, x_max, y_max, CELL_SIZE);
-
-    std::cout << "Grid: " << g.getNx() << " x " << g.getNy()
-              << " squares, cell_size = " << g.getCellSize() << std::endl;
-
-    // сортировка точек по квадратам
-    std::vector<point> sorted_points = sortPointsBySquares(all_points, g);
-    std::cout << "Sorted " << sorted_points.size() << " points by squares" << std::endl;
-
-    // сохранение результатов 03.10
-    writePointsTXT("cones-points-sorted.txt", sorted_points, g);
-    writePointsTXT("cones-points-unsorted.txt", all_points, g);
-    writeGnuplotSurface("cone-surface.txt", cones);
-    writeGridLines("grid-lines.txt", g);
-
-    const float WAVE_THRESHOLD = 1.5f;
-
-    std::vector<int> wave_cluster_ids;
-    std::vector<cluster> clusters = runWaveClustering(
-        all_points, WAVE_THRESHOLD, wave_cluster_ids);
-
-    // печать координат кластеров
-    printClusterStats(clusters);
-
-    // сохранение результата
-    writeClustersTXT("clusters-points.txt", all_points, wave_cluster_ids);
-
-    // визуализация кластеров (2 PNG + интерактив)
-    createClusterGnuplotScript("plot_clusters_static.gp", true);
-    runGnuplot("plot_clusters_static.gp");
-
-    createClusterGnuplotScript("plot_clusters_interactive.gp", false);
-    runGnuplot("plot_clusters_interactive.gp");
-
+    //визуализация
+    visualizePyramids(pyramids, allClouds, allResults);
     return 0;
 }
